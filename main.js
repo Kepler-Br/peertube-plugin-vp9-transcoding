@@ -1,6 +1,15 @@
 // https://developers.google.com/media/vp9/settings/vod
 
-// TODO: Make a setting to change b:v, minrate, maxrate
+const VodQuality = {
+    UNWATCHABLE: 'UNWATCHABLE',
+    TRASH: 'TRASH',
+    EVEN_LOWER: 'EVEN_LOWER',
+    LOWER: 'LOWER',
+    LOW: 'LOW',
+    DEFAULT: 'DEFAULT',
+    BETTER: 'BETTER',
+    TOO_GOOD: 'TOO_GOOD'
+};
 
 function getBitrate(options) {
     const listBuilder = (bitrate, minBitrate, maxBitrate) => {
@@ -37,6 +46,23 @@ function getBitrate(options) {
 function getQuality(options) {
     const listBuilder = (crf) => {
         return [`-crf ${crf}`]
+    }
+
+    const qualityCalculator = (defaultCrf, selectedQuality) => {
+        let qualityDict = {}
+        qualityDict[VodQuality.LOW] = 1
+        qualityDict[VodQuality.UNWATCHABLE] = 1
+        qualityDict[VodQuality.TRASH] = 1
+        qualityDict[VodQuality.EVEN_LOWER] = 1
+        qualityDict[VodQuality.LOWER] = 1
+        qualityDict[VodQuality.LOW] = 1
+        qualityDict[VodQuality.DEFAULT] = 1
+        qualityDict[VodQuality.BETTER] = 1
+        qualityDict[VodQuality.TOO_GOOD] = 1
+
+        let result = qualityDict[selectedQuality] * defaultCrf
+
+        return Math.max(Math.min(defaultCrf, result), 0)
     }
 
     switch (options.resolution) {
@@ -97,7 +123,7 @@ function builderVodFun(options, store) {
     let targetFps = options.fps
 
     if (store['isFramerateCapped']) {
-        let targetFps = Math.min(options.fps, store['framerateCap'])
+        targetFps = Math.min(options.fps, store['framerateCap'])
     }
 
     let keyFrameSpacing = store['keyFrameSpacing']
@@ -113,14 +139,6 @@ function builderVodFun(options, store) {
     }
 }
 
-function returnOrDefault(value, defaultValue) {
-    if (!Number.isInteger(value)) {
-        console.error(`${value} is not an integer! Setting it to ${defaultKeyFrameSpacing}`)
-
-        return defaultValue
-    }
-}
-
 async function register({
                             registerSetting,
                             settingsManager,
@@ -129,31 +147,46 @@ async function register({
     const defaultKeyFrameSpacing = 240
     const defaultFramerateCap = 30
     const defaultIsFramerateCapped = true
+    const defaultQuality = VodQuality.DEFAULT
 
     const store = {
         keyFrameSpacing: await settingsManager.getSetting('keyFrameSpacing') || defaultKeyFrameSpacing,
         framerateCap: await settingsManager.getSetting('framerateCap') || defaultFramerateCap,
         isFramerateCapped: await settingsManager.getSetting('isFramerateCapped') || defaultIsFramerateCapped,
+        quality: await settingsManager.getSetting('quality') || defaultQuality,
+        crf: await settingsManager.getSetting('crf') || defaultQuality,
     }
 
     const builderVOD = (options) => {
         return builderVodFun(options, store)
     }
 
-    // registerSetting({
-    //   name: 'crf',
-    //   label: 'Quality',
-    //   type: 'select',
-    //   options: [
-    //     { label: 'Default', value: 23 },
-    //     { label: 'Good', value: 20 },
-    //     { label: 'Very good', value: 17 },
-    //     { label: 'Excellent', value: 14 }
-    //   ],
-    //   descriptionHTML: 'Increasing quality will result in bigger video sizes',
-    //   private: true,
-    //   default: defaultCRF
-    // })
+    registerSetting({
+        name: 'crf',
+        label: 'Constant Rate Factor',
+        type: 'select',
+        options: [
+            {label: 'Trash', value: VodQuality.TRASH},
+            {label: 'Even lower', value: VodQuality.EVEN_LOWER},
+            {label: 'Lower', value: VodQuality.LOWER},
+            {label: 'Low', value: VodQuality.LOW},
+            {label: 'Default', value: VodQuality.DEFAULT},
+            {label: 'Better', value: VodQuality.BETTER},
+            {label: 'Too good', value: VodQuality.TOO_GOOD},
+        ],
+        descriptionHTML: `
+Use this rate control mode if you want to keep the best quality and care less about the file size.<br/>
+<strong>Too good</strong> - you don't want this setting to be selected. Will consume too much space, encoding time and probably doesn't worth it;<br/>
+<strong>Better</strong> - somewhat higher quality transcoding;<br/>
+<strong>Default</strong> - the way Google described it in theirs article;<br/>
+<strong>Low</strong> - when you want to save some space but want videos to be watchable;<br/>
+<strong>Lower</strong> - more space, less watchable;<br/>
+<strong>Even lower</strong> - almost unwatchable, but fast and space efficient;<br/>
+<strong>Trash</strong> - if you feel like goofing around.
+`,
+        private: true,
+        default: defaultQuality
+    })
 
     registerSetting({
         name: 'keyFrameSpacing',
