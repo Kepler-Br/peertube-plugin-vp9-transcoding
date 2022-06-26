@@ -43,26 +43,32 @@ function getBitrate(options) {
     }
 }
 
-function getQuality(options) {
-    const listBuilder = (crf) => {
-        return [`-crf ${crf}`]
+function getQuality(options, quality) {
+    const qualityCalculator = (inputCrf, selectedQuality) => {
+        const maxCrf = 63
+        const minCrf = 0
+
+        let qualityDict = {}
+
+        qualityDict[VodQuality.LOW] = 50
+        qualityDict[VodQuality.UNWATCHABLE] = 40
+        qualityDict[VodQuality.TRASH] = 30
+        qualityDict[VodQuality.EVEN_LOWER] = 20
+        qualityDict[VodQuality.LOWER] = 10
+        qualityDict[VodQuality.LOW] = 5
+        qualityDict[VodQuality.DEFAULT] = 0
+        qualityDict[VodQuality.BETTER] = -10
+        qualityDict[VodQuality.TOO_GOOD] = -20
+
+        let calculated_crf = inputCrf + qualityDict[selectedQuality]
+
+        return Math.max(minCrf, Math.min(calculated_crf, maxCrf))
     }
 
-    const qualityCalculator = (defaultCrf, selectedQuality) => {
-        let qualityDict = {}
-        qualityDict[VodQuality.LOW] = 1
-        qualityDict[VodQuality.UNWATCHABLE] = 1
-        qualityDict[VodQuality.TRASH] = 1
-        qualityDict[VodQuality.EVEN_LOWER] = 1
-        qualityDict[VodQuality.LOWER] = 1
-        qualityDict[VodQuality.LOW] = 1
-        qualityDict[VodQuality.DEFAULT] = 1
-        qualityDict[VodQuality.BETTER] = 1
-        qualityDict[VodQuality.TOO_GOOD] = 1
+    const listBuilder = (crf) => {
+        let new_crf = qualityCalculator(crf, quality)
 
-        let result = qualityDict[selectedQuality] * defaultCrf
-
-        return Math.max(Math.min(defaultCrf, result), 0)
+        return [`-crf ${new_crf}`]
     }
 
     switch (options.resolution) {
@@ -128,10 +134,12 @@ function builderVodFun(options, store) {
 
     let keyFrameSpacing = store['keyFrameSpacing']
 
+    let quality = store['crfQuality']
+
     outputOptions.push(`-r ${targetFps}`)
     outputOptions.push(`-g ${keyFrameSpacing}`)
     outputOptions.push(...getBitrate(options))
-    outputOptions.push(...getQuality(options))
+    outputOptions.push(...getQuality(options, quality))
     outputOptions.push(...getTileColumns(options))
 
     return {
@@ -153,8 +161,7 @@ async function register({
         keyFrameSpacing: await settingsManager.getSetting('keyFrameSpacing') || defaultKeyFrameSpacing,
         framerateCap: await settingsManager.getSetting('framerateCap') || defaultFramerateCap,
         isFramerateCapped: await settingsManager.getSetting('isFramerateCapped') || defaultIsFramerateCapped,
-        quality: await settingsManager.getSetting('quality') || defaultQuality,
-        crf: await settingsManager.getSetting('crf') || defaultQuality,
+        crfQuality: await settingsManager.getSetting('crfQuality') || defaultQuality,
     }
 
     const builderVOD = (options) => {
@@ -162,7 +169,7 @@ async function register({
     }
 
     registerSetting({
-        name: 'crf',
+        name: 'crfQuality',
         label: 'Constant Rate Factor',
         type: 'select',
         options: [
@@ -220,7 +227,7 @@ For web and mobile playback, generous spacing between keyframes allows the encod
     })
 
     let setParsedUIntOrDefault = (valueName, defaultValue, changedSettings) => {
-        let changedValue = changedSettings[valueName].trim()
+        let changedValue = changedSettings[valueName].toString().trim()
         let parsedValue = Number.parseInt(changedValue)
 
         if (!Number.isInteger(parsedValue) || parsedValue < 0) {
@@ -235,8 +242,28 @@ For web and mobile playback, generous spacing between keyframes allows the encod
     }
 
     settingsManager.onSettingsChange(settings => {
-        setParsedUIntOrDefault('keyFrameSpacing', defaultKeyFrameSpacing, settings)
-        setParsedUIntOrDefault('framerateCap', defaultFramerateCap, settings)
+        store.isFramerateCapped = settings['isFramerateCapped']
+        store.framerateCap = settings['framerateCap']
+        store.crfQuality = settings['crfQuality']
+        store.keyFrameSpacing = settings['keyFrameSpacing']
+        // if (settings) {
+        //     if (settings.keyFrameSpacing) {
+        //         setParsedUIntOrDefault('keyFrameSpacing', defaultKeyFrameSpacing, settings)
+        //     }
+        //     if (settings.framerateCap) {
+        //         setParsedUIntOrDefault('framerateCap', defaultFramerateCap, settings)
+        //     }
+        //     if (settings.crfQuality) {
+        //         store.crfQuality = settings.crfQuality
+        //         console.log(settings.crfQuality)
+        //         console.log(store.crfQuality)
+        //         // await settingsManager.setSetting('crfQuality', await settingsManager.getSetting('crfQuality'))
+        //     }
+        //     if (settings.isFramerateCapped) {
+        //         store.isFramerateCapped = settings.isFramerateCapped
+        //     }
+        // }
+
     })
 
     const encoder = 'libvpx-vp9'

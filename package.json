@@ -1,20 +1,21 @@
 {
-  "name": "peertube-plugin-transcoding-custom-quality",
-  "version": "0.0.2",
+  "name": "peertube-plugin-vp9-transcoding",
+  "version": "1.0.0",
   "description": "Set a custom quality for transcoding",
   "engine": {
-    "peertube": ">=3.3.0"
+    "peertube": ">=4.0.0"
   },
   "keywords": [
     "peertube",
-    "plugin"
+    "plugin",
+    "VP9"
   ],
-  "homepage": "https://framagit.org/framasoft/peertube/official-plugins/tree/master/peertube-plugin-transcoding-custom-quality",
   "author": "Barrett Kepler",
-  "bugs": "https://framagit.org/framasoft/peertube/official-plugins/issues",
   "library": "./main.js",
   "staticDirs": {},
   "css": [],
   "clientScripts": [],
-  "translations": {}
+  "translations": {},
+  "homepage": "https://framagit.org/framasoft/peertube/official-plugins/tree/master/peertube-plugin-auth-ldap",
+  "bugs": "https://framagit.org/framasoft/peertube/official-plugins/issues"
 }
