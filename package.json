@@ -1,21 +1,29 @@
 {
   "name": "peertube-plugin-vp9-transcoding",
   "version": "1.0.0",
-  "description": "Set a custom quality for transcoding",
+  "license": "MIT",
+  "description": "VP9 transcoding plugin. Set a custom quality for transcoding",
   "engine": {
-    "peertube": ">=4.0.0"
+    "peertube": ">=5.1.0"
   },
   "keywords": [
     "peertube",
     "plugin",
     "VP9"
   ],
+  "homepage": "https://github.com/Kepler-Br/peertube-vp9-transcoding",
   "author": "Barrett Kepler",
-  "library": "./main.js",
+  "bugs": "https://github.com/Kepler-Br/peertube-vp9-transcoding/issues",
+  "library": "./dist/main.js",
+  "files": [
+    "/dist"
+  ],
   "staticDirs": {},
   "css": [],
   "clientScripts": [],
   "translations": {},
-  "homepage": "https://framagit.org/framasoft/peertube/official-plugins/tree/master/peertube-plugin-auth-ldap",
-  "bugs": "https://framagit.org/framasoft/peertube/official-plugins/issues"
+  "scripts": {
+  },
+  "devDependencies": {
+  }
 }

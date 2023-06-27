@@ -1,5 +1,8 @@
 // https://developers.google.com/media/vp9/settings/vod
 
+let logger;
+let transcodingManager;
+
 const VodQuality = {
     UNWATCHABLE: 'UNWATCHABLE',
     TRASH: 'TRASH',
@@ -10,6 +13,18 @@ const VodQuality = {
     BETTER: 'BETTER',
     TOO_GOOD: 'TOO_GOOD'
 };
+
+const DeadLineQuality = {
+    REALTIME: 'realtime',
+    GOOD: 'good',
+    BEST: 'best'
+};
+
+const defaultKeyFrameSpacing = 240
+const defaultFramerateCap = 30
+const defaultIsFramerateCapped = true
+const defaultQuality = VodQuality.DEFAULT
+const defaultDeadline = DeadLineQuality.GOOD
 
 function getBitrate(options) {
     const listBuilder = (bitrate, minBitrate, maxBitrate) => {
@@ -38,7 +53,7 @@ function getBitrate(options) {
         case 2160:
             return listBuilder(12000, 6000, 17400)
         default:
-            console.error(`getBitrate: UNKNOWN VIDEO RESOLUTION: ${options.resolution}; USING 144p AS FALLBACK`)
+            logger.error(`getBitrate: UNKNOWN VIDEO RESOLUTION: ${options.resolution}; USING 144p AS FALLBACK`)
             return listBuilder(150, 75, 218)
     }
 }
@@ -89,7 +104,7 @@ function getQuality(options, quality) {
         case 2160:
             return listBuilder(15)
         default:
-            console.error(`getQuality: UNKNOWN VIDEO RESOLUTION: ${options.resolution}; USING 144p AS FALLBACK`)
+            logger.error(`getQuality: UNKNOWN VIDEO RESOLUTION: ${options.resolution}; USING 144p AS FALLBACK`)
             return listBuilder(37)
     }
 }
@@ -119,7 +134,7 @@ function getTileColumns(options) {
         case 2160:
             return listBuilder(4, 4 * 4)
         default:
-            console.error(`getTileColumns: UNKNOWN VIDEO RESOLUTION: ${options.resolution}; USING 2160p AS FALLBACK`)
+            logger.error(`getTileColumns: UNKNOWN VIDEO RESOLUTION: ${options.resolution}; USING 2160p AS FALLBACK`)
             return listBuilder(4, 4 * 4)
     }
 }
@@ -132,14 +147,11 @@ function builderVodFun(options, store) {
         targetFps = Math.min(options.fps, store['framerateCap'])
     }
 
-    let keyFrameSpacing = store['keyFrameSpacing']
-
-    let quality = store['crfQuality']
-
     outputOptions.push(`-r ${targetFps}`)
-    outputOptions.push(`-g ${keyFrameSpacing}`)
+    outputOptions.push(`-deadline ${store['deadline']}`)
+    outputOptions.push(`-g ${store['keyFrameSpacing']}`)
     outputOptions.push(...getBitrate(options))
-    outputOptions.push(...getQuality(options, quality))
+    outputOptions.push(...getQuality(options, store['crfQuality']))
     outputOptions.push(...getTileColumns(options))
 
     return {
@@ -147,27 +159,7 @@ function builderVodFun(options, store) {
     }
 }
 
-async function register({
-                            registerSetting,
-                            settingsManager,
-                            transcodingManager
-                        }) {
-    const defaultKeyFrameSpacing = 240
-    const defaultFramerateCap = 30
-    const defaultIsFramerateCapped = true
-    const defaultQuality = VodQuality.DEFAULT
-
-    const store = {
-        keyFrameSpacing: await settingsManager.getSetting('keyFrameSpacing') || defaultKeyFrameSpacing,
-        framerateCap: await settingsManager.getSetting('framerateCap') || defaultFramerateCap,
-        isFramerateCapped: await settingsManager.getSetting('isFramerateCapped') || defaultIsFramerateCapped,
-        crfQuality: await settingsManager.getSetting('crfQuality') || defaultQuality,
-    }
-
-    const builderVOD = (options) => {
-        return builderVodFun(options, store)
-    }
-
+function registerSettings(registerSetting) {
     registerSetting({
         name: 'crfQuality',
         label: 'Constant Rate Factor',
@@ -193,6 +185,25 @@ Use this rate control mode if you want to keep the best quality and care less ab
 `,
         private: true,
         default: defaultQuality
+    })
+
+    registerSetting({
+        name: 'deadline',
+        label: 'Deadline',
+        type: 'select',
+        options: [
+            {label: 'Best', value: DeadLineQuality.BEST},
+            {label: 'Good', value: DeadLineQuality.GOOD},
+            {label: 'Realtime', value: DeadLineQuality.REALTIME}
+        ],
+        descriptionHTML: `
+<strong>good</strong> is the default and recommended for most applications.<br/>
+<strong>best</strong> is recommended if you have lots of time and want the best compression efficiency.<br/>
+<strong>realtime</strong> is recommended for live / fast encoding.<br/>
+<a href="https://trac.ffmpeg.org/wiki/Encode/VP9#DeadlineQuality">Source</a>
+`,
+        private: true,
+        default: defaultDeadline
     })
 
     registerSetting({
@@ -225,13 +236,34 @@ For web and mobile playback, generous spacing between keyframes allows the encod
         private: true,
         default: defaultFramerateCap,
     })
+}
+
+async function register({settingsManager, peertubeHelpers, transcodingManager: transcode, registerSetting}) {
+    logger = peertubeHelpers.logger;
+    transcodingManager = transcode;
+
+    logger.info("Registering peertube-plugin-vp9-transcoding");
+
+    const store = {
+        keyFrameSpacing: await settingsManager.getSetting('keyFrameSpacing') || defaultKeyFrameSpacing,
+        framerateCap: await settingsManager.getSetting('framerateCap') || defaultFramerateCap,
+        isFramerateCapped: await settingsManager.getSetting('isFramerateCapped') || defaultIsFramerateCapped,
+        crfQuality: await settingsManager.getSetting('crfQuality') || defaultQuality,
+        deadline: await settingsManager.getSetting('deadline') || defaultDeadline,
+    }
+
+    const builderVOD = (options) => {
+        return builderVodFun(options, store)
+    }
+
+    registerSettings(registerSetting)
 
     let setParsedUIntOrDefault = (valueName, defaultValue, changedSettings) => {
         let changedValue = changedSettings[valueName].toString().trim()
         let parsedValue = Number.parseInt(changedValue)
 
         if (!Number.isInteger(parsedValue) || parsedValue < 0) {
-            console.error(`${valueName} is not a positive integer(${changedValue})! Setting it to ${defaultValue}`)
+            logger.error(`${valueName} is not a positive integer(${changedValue})! Setting it to ${defaultValue}`)
 
             parsedValue = defaultValue
         }
@@ -245,25 +277,8 @@ For web and mobile playback, generous spacing between keyframes allows the encod
         store.isFramerateCapped = settings['isFramerateCapped']
         store.framerateCap = settings['framerateCap']
         store.crfQuality = settings['crfQuality']
+        store.deadline = settings['deadline']
         store.keyFrameSpacing = settings['keyFrameSpacing']
-        // if (settings) {
-        //     if (settings.keyFrameSpacing) {
-        //         setParsedUIntOrDefault('keyFrameSpacing', defaultKeyFrameSpacing, settings)
-        //     }
-        //     if (settings.framerateCap) {
-        //         setParsedUIntOrDefault('framerateCap', defaultFramerateCap, settings)
-        //     }
-        //     if (settings.crfQuality) {
-        //         store.crfQuality = settings.crfQuality
-        //         console.log(settings.crfQuality)
-        //         console.log(store.crfQuality)
-        //         // await settingsManager.setSetting('crfQuality', await settingsManager.getSetting('crfQuality'))
-        //     }
-        //     if (settings.isFramerateCapped) {
-        //         store.isFramerateCapped = settings.isFramerateCapped
-        //     }
-        // }
-
     })
 
     const encoder = 'libvpx-vp9'
@@ -275,9 +290,10 @@ For web and mobile playback, generous spacing between keyframes allows the encod
 }
 
 async function unregister() {
+    logger.info("Unregistering peertube-plugin-vp9-transcoding");
+    transcodingManager.removeAllProfilesAndEncoderPriorities();
+    return true;
 }
 
-module.exports = {
-    register,
-    unregister
-}
+exports.register = register;
+exports.unregister = unregister;
